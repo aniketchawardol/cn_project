@@ -1,4 +1,56 @@
 import React, { useEffect, useRef, useState } from "react";
+import Arrow from "./Arrow";
+
+const TwoHeadedArrow = ({ 
+  label = "Timeout interval", 
+  length = 800, 
+  x = 50, 
+  y = 50 
+}) => {
+  return (
+    <svg width={length + 20} height={100} className="overflow-visible">
+      {/* Vertical start line */}
+      <line 
+        x1={x + 10} 
+        y1={y - 20}  
+        x2={x + 10} 
+        y2={y + 20}  
+        stroke="black" 
+        strokeWidth="1" 
+      />
+      
+      {/* Main horizontal arrow */}
+      <line 
+        x1={x + 10} 
+        y1={y} 
+        x2={x + length + 10} 
+        y2={y} 
+        stroke="black" 
+        strokeWidth="1" 
+      />
+      
+      {/* Vertical end line */}
+      <line 
+        x1={x + length + 10} 
+        y1={y - 20} 
+        x2={x + length + 10} 
+        y2={y + 20} 
+        stroke="black" 
+        strokeWidth="1" 
+      />
+      
+      {/* Label */}
+      <text 
+        x={x + length / 2 + 10} 
+        y={y - 10} 
+        textAnchor="middle" 
+        fontSize="15"
+      >
+        {label}
+      </text>
+    </svg>
+  );
+};
 
 const SelectiveRepeatARQ = () => {
   const senderRefs = useRef([]);
@@ -123,9 +175,11 @@ const SelectiveRepeatARQ = () => {
 
   const senderPackets = lostFrame == 2 ? [...Array(9).keys(), 2,9,10,11,12] : [...Array(8).keys(), 1,8,9,10,11,12];
   const receiverPackets = lostFrame === 1 ? [0, "E", 2, 3, 4, 5, 6, 7, 1, 8, 9] : [0, 1, "E", 3, 4, 5, 6, 7, 8, 2, 9]
+  
   return (
     <div className="relative flex flex-col items-center p-4">
       <h1 className="text-2xl font-bold mb-4">Selective Repeat ARQ</h1>
+      
       {/* Control Panel */}
       <div className="flex items-center space-x-4 mb-4">
         <div className="flex items-center space-x-2">
@@ -152,6 +206,41 @@ const SelectiveRepeatARQ = () => {
         >
           Reset
         </button>
+      </div>
+
+      {/* Timeout Interval Arrow */}
+      <div className={`absolute top-36 left-0 right-0 ${shownSenderFrames.includes(lostFrame) ? 'frame-fade-in' : 'opacity-0'}`}>
+        <TwoHeadedArrow 
+          label="Timeout interval" 
+          length={500}  
+          x={lostFrame === 1 ? 470 : 540}        
+          y={10}        
+        />
+      </div>
+
+      <div className={`absolute top-36 left-0 right-0 ${shownSenderFrames.includes(lostFrame + 6) ? 'frame-fade-in' : 'opacity-0'}`}>
+        <TwoHeadedArrow 
+          label="Buffered by data link layer" 
+          length={360}  
+          x={lostFrame === 1 ? 680 : 750}        
+          y={250}        
+        />
+      </div>
+
+      <div className={`absolute top-36 left-0 right-0 ${shownReceiverFrames.includes(lostFrame) ? 'frame-fade-in' : 'opacity-0'}`}>
+      <Arrow label = "Error"
+      x ={lostFrame === 1 ? 600 : 670} 
+      y = {250}
+      pointerY = {-20}
+      textWidth = {20} />
+      </div>
+
+      <div className={`absolute top-36 left-0 right-0 ${shownReceiverFrames.includes(lostFrame + 7) ? 'frame-fade-in' : 'opacity-0'}`}>
+      <Arrow label = {`Packets ${lostFrame + 1}-${lostFrame + 6} passed to network layer`}
+      x ={lostFrame === 1 ? 1100 : 1170} 
+      y = {250}
+      pointerY = {-20}
+      textWidth = {20} />
       </div>
 
       <style>{`
