@@ -8,12 +8,14 @@ const SelectiveRepeatARQ = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isContinuous, setIsContinuous] = useState(false);
   const stepTimerRef = useRef(null);
+  const [lostFrame, setLostFrame] = useState(null);
   const [shownSenderFrames, setShownSenderFrames] = useState([]);
   const [shownReceiverFrames, setShownReceiverFrames] = useState([]);
+  const [visibleArrowIndexes, setVisibleArrowIndexes] = useState([]);
 
   // Mapping to control ACK arrow timing
   const ackTriggerMapping = {
-    0: 3,  1: 4,  2: null, 3: 6, 4: 7, 5: 8, 
+    0: 3,  1: lostFrame === 2 ? 4 : null,  2: (lostFrame === 1) ? 5 : null, 3: 6, 4: 7, 5: 8, 
     6: 9,  7: 10, 8: 11,  9: 12,
   };
 
@@ -37,17 +39,10 @@ const SelectiveRepeatARQ = () => {
     setCurrentStep(prevStep => prevStep + 1);
   };
 
-  // Reset animation
-  const handleReset = () => {
-    setCurrentStep(0);
-    setShownSenderFrames([]);
-    setShownReceiverFrames([]);
-    if (stepTimerRef.current) {
-      clearInterval(stepTimerRef.current);
-    }
-  };
-
   useEffect(() => {
+    if (lostFrame === null) {
+      setLostFrame(Math.random() < 0.5 ? 1 : 2);
+    }
     const calculateArrowPositions = () => {
       if (senderRefs.current.length && receiverRefs.current.length) {
         const dataArrows = senderRefs.current
@@ -62,7 +57,7 @@ const SelectiveRepeatARQ = () => {
               x2: receiverBox.left + receiverBox.width / 2,
               y2: receiverBox.top + receiverBox.height / 2,
               sender: index,
-              isError: index === 2, // Error for frame 2
+              isError: index === lostFrame, 
             };
           })
           .filter(Boolean);
@@ -103,8 +98,14 @@ const SelectiveRepeatARQ = () => {
       .filter((_, index) => index * 2 <= currentStep)
       .map(arrow => arrow.sender);
 
+    // New logic to manage visible arrow indexes
+    const newVisibleArrowIndexes = arrowPositions
+      .filter((_, index) => newSenderFrames.includes(index))
+      .map((_, index) => index);
+
     setShownSenderFrames(newSenderFrames);
     setShownReceiverFrames(newReceiverFrames);
+    setVisibleArrowIndexes(newVisibleArrowIndexes);
 
     if (isContinuous) {
       stepTimerRef.current = setInterval(() => {
@@ -120,8 +121,11 @@ const SelectiveRepeatARQ = () => {
     };
   }, [isContinuous, currentStep]);
 
+  const senderPackets = lostFrame == 2 ? [...Array(9).keys(), 2,9,10,11,12] : [...Array(8).keys(), 1,8,9,10,11,12];
+  const receiverPackets = lostFrame === 1 ? [0, "E", 2, 3, 4, 5, 6, 7, 1, 8, 9] : [0, 1, "E", 3, 4, 5, 6, 7, 8, 2, 9]
   return (
     <div className="relative flex flex-col items-center p-4">
+      <h1 className="text-2xl font-bold mb-4">Selective Repeat ARQ</h1>
       {/* Control Panel */}
       <div className="flex items-center space-x-4 mb-4">
         <div className="flex items-center space-x-2">
@@ -143,7 +147,7 @@ const SelectiveRepeatARQ = () => {
           </button>
         )}
         <button 
-          onClick={handleReset} 
+          onClick={() => window.location.reload()} 
           className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
         >
           Reset
@@ -174,7 +178,7 @@ const SelectiveRepeatARQ = () => {
 
       {/* Sender Packets */}
       <div className="flex space-x-2 mt-10">
-        {[...Array(9).keys(), 2,9,10,11,12].map((num, index) => (
+        {senderPackets.map((num, index) => (
           <div 
             key={index} 
             ref={el => senderRefs.current[index] = el} 
@@ -188,7 +192,7 @@ const SelectiveRepeatARQ = () => {
 
       {/* Receiver Packets */}
       <div className="flex space-x-2 mt-20 ml-15">
-        {[0, 1, "E", 3, 4, 5, 6, 7, 8, 2, 9].map((num, index) => (
+        {receiverPackets.map((num, index) => (
           <div 
             key={index} 
             ref={el => receiverRefs.current[index] = el} 
@@ -225,7 +229,7 @@ const SelectiveRepeatARQ = () => {
 
         {/* Data Arrows */}
         {arrowPositions
-          .filter((_, index) => index * 2 <= currentStep)
+          .filter((_, index) => visibleArrowIndexes.includes(index))
           .map(({ x1, y1, x2, y2, sender, isError }, index) => (
             <line 
               key={`data-${sender}`} 
@@ -236,6 +240,7 @@ const SelectiveRepeatARQ = () => {
               className="data-arrow"
             />
           ))}
+
       </svg>
     </div>
   );

@@ -9,7 +9,7 @@ let mainWindow;
 
 app.whenReady().then(() => {
   mainWindow = new BrowserWindow({
-    width: 1280,
+    width: 1800,
     height: 800,
     webPreferences: {
       nodeIntegration: false,
