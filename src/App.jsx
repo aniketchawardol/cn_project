@@ -177,13 +177,13 @@ const SelectiveRepeatARQ = () => {
   const receiverPackets = lostFrame === 1 ? [0, "E", 2, 3, 4, 5, 6, 7, 1, 8, 9] : [0, 1, "E", 3, 4, 5, 6, 7, 8, 2, 9]
   
   return (
-    <div className="relative flex flex-col items-center p-4">
-      <h1 className="text-2xl font-bold mb-4">Selective Repeat ARQ</h1>
+    <div className="relative flex flex-col items-center p-5">
+      <h1 className="text-4xl font-bold mb-4">Selective Repeat ARQ</h1>
       
       {/* Control Panel */}
-      <div className="flex items-center space-x-4 mb-4">
+      <div className="flex items-center space-x-4 m-4 text-xl">
         <div className="flex items-center space-x-2">
-          <label htmlFor="mode-toggle" className="text-sm">Continuous</label>
+          <label htmlFor="mode-toggle">Continuous</label>
           <input 
             type="checkbox" 
             id="mode-toggle" 
@@ -209,36 +209,36 @@ const SelectiveRepeatARQ = () => {
       </div>
 
       {/* Timeout Interval Arrow */}
-      <div className={`absolute top-36 left-0 right-0 ${shownSenderFrames.includes(lostFrame) ? 'frame-fade-in' : 'opacity-0'}`}>
+      <div className={`absolute top-36 left-0 right-0 ${shownSenderFrames.includes(lostFrame + 7) ? 'frame-fade-in' : 'opacity-0'}`}>
         <TwoHeadedArrow 
           label="Timeout interval" 
-          length={500}  
-          x={lostFrame === 1 ? 470 : 540}        
-          y={10}        
+          length={640}  
+          x={lostFrame === 1 ? 360 : 450}        
+          y={30}        
         />
       </div>
 
       <div className={`absolute top-36 left-0 right-0 ${shownSenderFrames.includes(lostFrame + 6) ? 'frame-fade-in' : 'opacity-0'}`}>
         <TwoHeadedArrow 
           label="Buffered by data link layer" 
-          length={360}  
-          x={lostFrame === 1 ? 680 : 750}        
-          y={250}        
+          length={460}  
+          x={lostFrame === 1 ? 620 : 710}        
+          y={350}        
         />
       </div>
 
       <div className={`absolute top-36 left-0 right-0 ${shownReceiverFrames.includes(lostFrame) ? 'frame-fade-in' : 'opacity-0'}`}>
       <Arrow label = "Error"
-      x ={lostFrame === 1 ? 600 : 670} 
-      y = {250}
+      x ={lostFrame === 1 ? 515 : 610} 
+      y = {340}
       pointerY = {-20}
       textWidth = {20} />
       </div>
 
       <div className={`absolute top-36 left-0 right-0 ${shownReceiverFrames.includes(lostFrame + 7) ? 'frame-fade-in' : 'opacity-0'}`}>
       <Arrow label = {`Packets ${lostFrame + 1}-${lostFrame + 6} passed to network layer`}
-      x ={lostFrame === 1 ? 1100 : 1170} 
-      y = {250}
+      x ={lostFrame === 1 ? 1160 : 1250} 
+      y = {340}
       pointerY = {-20}
       textWidth = {20} />
       </div>
@@ -271,7 +271,7 @@ const SelectiveRepeatARQ = () => {
           <div 
             key={index} 
             ref={el => senderRefs.current[index] = el} 
-            className={`w-10 h-10 m-4 border border-black flex items-center justify-center 
+            className={`w-15 h-15 m-4 border border-black flex items-center justify-center 
               ${shownSenderFrames.includes(index) ? 'frame-fade-in' : 'opacity-0'}`}
           >
             {num}
@@ -285,7 +285,7 @@ const SelectiveRepeatARQ = () => {
           <div 
             key={index} 
             ref={el => receiverRefs.current[index] = el} 
-            className={`w-10 h-10 m-4 border border-black flex items-center justify-center 
+            className={`w-15 h-15 m-4 mt-10 border border-black flex items-center justify-center 
               ${shownReceiverFrames.includes(index) ? 'frame-fade-in' : 'opacity-0'}`}
           >
             {num}
@@ -301,8 +301,8 @@ const SelectiveRepeatARQ = () => {
           .map(({ x1, y1, x2, y2, label }, index) => (
             <React.Fragment key={`ack-${index}`}>
               <line 
-                x1={x1} y1={y1 - 20} 
-                x2={x2} y2={y2 + 20} 
+                x1={x1} y1={y1 - 30} 
+                x2={x2} y2={y2 + 30} 
                 stroke="grey" strokeWidth="2" opacity="0.8" className="ack-arrow" 
               />
               <text 
@@ -322,8 +322,8 @@ const SelectiveRepeatARQ = () => {
           .map(({ x1, y1, x2, y2, sender, isError }, index) => (
             <line 
               key={`data-${sender}`} 
-              x1={x1} y1={y1 + 20} 
-              x2={x2} y2={y2 - 20} 
+              x1={x1} y1={y1 + 30} 
+              x2={x2} y2={y2 - 30} 
               stroke={isError ? "red" : "black"} 
               strokeWidth="2" 
               className="data-arrow"
