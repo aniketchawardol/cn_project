@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import Arrow from "./Arrow";
 
 const TwoHeadedArrow = ({ 
   label = "Timeout interval", 
@@ -64,9 +63,9 @@ const SlidingWindow = ({
   color = "rgba(0, 128, 255, 0.2)" 
 }) => {
   return (
-    <g>
+    <g className="window-slide" style={{ transform: `translateX(${x}px)` }}>
       <rect 
-        x={x} 
+        x={0} 
         y={y + 5} 
         width={width} 
         height={height + 30} 
@@ -76,7 +75,7 @@ const SlidingWindow = ({
         strokeDasharray="5,5" 
       />
       <text 
-        x={x + width / 2} 
+        x={width / 2} 
         y={y - 5} 
         textAnchor="middle" 
         fontSize="12" 
@@ -128,24 +127,57 @@ const SelectiveRepeatARQ = () => {
   const [ackPositions, setAckPositions] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [isContinuous, setIsContinuous] = useState(false);
+  const [simulationStarted, setSimulationStarted] = useState(false);
+  const [animationSpeed, setAnimationSpeed] = useState(1); // 1 is default speed
   const stepTimerRef = useRef(null);
-  const [lostFrame, setLostFrame] = useState(1);
+  const [lostFrames, setLostFrames] = useState([1]);
+  const [lostAcks, setLostAcks] = useState([]);
   const [shownSenderFrames, setShownSenderFrames] = useState([]);
   const [shownReceiverFrames, setShownReceiverFrames] = useState([]);
   const [visibleArrowIndexes, setVisibleArrowIndexes] = useState([]);
-  const windowSize = 4; // Fixed window size of 4
+  const windowSize = 4;
   const [packetTimers, setPacketTimers] = useState({});
-  const [adaptiveTimeout, setAdaptiveTimeout] = useState(600); // Base timeout value
-  const [windowStart, setWindowStart] = useState(0); // Start of sender window
-  const [receiverWindowStart, setReceiverWindowStart] = useState(0); // Start of receiver window
+  const [adaptiveTimeout, setAdaptiveTimeout] = useState(600);
+  const [windowStart, setWindowStart] = useState(0);
+  const [receiverWindowStart, setReceiverWindowStart] = useState(0);
+  const [logs, setLogs] = useState([]);
+  const prevStepRef = useRef(0);
+  const prevWindowStartRef = useRef(0);
+  const prevReceiverWindowStartRef = useRef(0);
+  const prevShownFramesRef = useRef([]);
 
-  // Update ACK trigger mapping based on lost frame
+  // Function to add a log entry
+  const addLog = (message) => {
+    setLogs([{ message }]); // Only keep the current message
+  };
+
+  // Handle lost frames input
+  const handleLostFramesChange = (e) => {
+    const input = e.target.value;
+    const frames = input.split(',')
+      .map(f => parseInt(f.trim()))
+      .filter(f => !isNaN(f) && f >= 0 && f <= 3);
+    setLostFrames(frames);
+    resetSimulation();
+  };
+
+  // Handle lost ACKs input
+  const handleLostAcksChange = (e) => {
+    const input = e.target.value;
+    const acks = input.split(',')
+      .map(f => parseInt(f.trim()))
+      .filter(f => !isNaN(f) && f >= 0 && f <= 3);
+    setLostAcks(acks);
+    resetSimulation();
+  };
+
+  // Update ACK trigger mapping based on lost frames and lost ACKs
   const getAckTriggerMapping = () => {
     const mapping = {
-      0: lostFrame === 0 ? null : 4,
-      1: lostFrame === 1 ? null : 5,
-      2: lostFrame === 2 ? null : 6,
-      3: lostFrame === 3 ? null : 7,
+      0: lostFrames.includes(0) || lostAcks.includes(0) ? null : 4,
+      1: lostFrames.includes(1) || lostAcks.includes(1) ? null : 5,
+      2: lostFrames.includes(2) || lostAcks.includes(2) ? null : 6,
+      3: lostFrames.includes(3) || lostAcks.includes(3) ? null : 7,
       4: 8,
       5: 9,
       6: 10,
@@ -154,16 +186,19 @@ const SelectiveRepeatARQ = () => {
       9: 13,
     };
     
-    // Add retransmitted frame's ACK
-    if (lostFrame >= 0 && lostFrame <= 3) {
-      mapping[lostFrame] = lostFrame + 8; // Retransmitted frame's ACK comes later
-    }
+    // Add retransmitted frames' ACKs (including frames whose ACKs were lost)
+    [...lostFrames, ...lostAcks].forEach(frame => {
+      if (frame >= 0 && frame <= 3) {
+        mapping[frame] = frame + 8; // Retransmitted frame's ACK comes later
+      }
+    });
     
     return mapping;
   };
 
   // Toggle Continuous Mode
   const toggleMode = () => {
+    setSimulationStarted(true);
     setIsContinuous(prev => !prev);
     if (stepTimerRef.current) {
       clearInterval(stepTimerRef.current);
@@ -173,13 +208,62 @@ const SelectiveRepeatARQ = () => {
     if (!isContinuous) {
       stepTimerRef.current = setInterval(() => {
         setCurrentStep(prevStep => prevStep + 1);
-      }, 2000);
+      }, 2000 / animationSpeed);
+    }
+  };
+
+  // Handle animation speed change
+  const handleSpeedChange = (e) => {
+    const newSpeed = parseFloat(e.target.value);
+    setAnimationSpeed(newSpeed);
+    
+    // Update continuous mode interval if it's running
+    if (isContinuous && stepTimerRef.current) {
+      clearInterval(stepTimerRef.current);
+      stepTimerRef.current = setInterval(() => {
+        setCurrentStep(prevStep => prevStep + 1);
+      }, 2000 / newSpeed);
     }
   };
 
   // Handle manual next step
   const handleNextStep = () => {
+    setSimulationStarted(true);
     setCurrentStep(prevStep => prevStep + 1);
+  };
+
+  // Handle manual previous step
+  const handlePrevStep = () => {
+    setCurrentStep(prevStep => {
+      const newStep = Math.max(0, prevStep - 1);
+      // When going back, we need to recalculate window positions
+      const ackMapping = getAckTriggerMapping();
+      let newWindowStart = 0;
+      let newReceiverStart = 0;
+      
+      // Find the appropriate window positions for this step
+      for (let step = 0; step <= newStep; step++) {
+        let lowestUnackedFrame = newWindowStart;
+        while (lowestUnackedFrame < newWindowStart + windowSize) {
+          const isAcked = Object.keys(ackMapping)
+            .filter(frame => parseInt(frame) === lowestUnackedFrame)
+            .some(frame => ackMapping[frame] * 2 - 1 <= step);
+          
+          if (!isAcked) break;
+          lowestUnackedFrame++;
+        }
+        
+        const slideAmount = lowestUnackedFrame - newWindowStart;
+        if (slideAmount > 0) {
+          newWindowStart = lowestUnackedFrame;
+          newReceiverStart += slideAmount;
+        }
+      }
+      
+      setWindowStart(newWindowStart);
+      setReceiverWindowStart(newReceiverStart);
+      return newStep;
+    });
   };
 
   // Reset simulation
@@ -191,18 +275,13 @@ const SelectiveRepeatARQ = () => {
     setShownReceiverFrames([]);
     setVisibleArrowIndexes([]);
     setPacketTimers({});
+    setSimulationStarted(false);
     if (stepTimerRef.current) {
       clearInterval(stepTimerRef.current);
       stepTimerRef.current = null;
     }
     setIsContinuous(false);
-  };
-
-  // Handle lost frame selection
-  const handleLostFrameChange = (e) => {
-    const newLostFrame = parseInt(e.target.value);
-    setLostFrame(newLostFrame);
-    resetSimulation();
+    setLogs([]);
   };
 
   // Calculate adaptive timeout based on network conditions
@@ -212,8 +291,8 @@ const SelectiveRepeatARQ = () => {
     const variation = Math.sin(currentStep * 0.1) * 100;
     
     // Apply exponential backoff after frame loss
-    const backoff = shownSenderFrames.includes(lostFrame) ? 
-      Math.min(200 * Math.pow(2, Math.min(3, currentStep - lostFrame * 2)), 800) : 0;
+    const backoff = shownSenderFrames.includes(lostFrames[0]) ? 
+      Math.min(200 * Math.pow(2, Math.min(3, currentStep - lostFrames[0] * 2)), 800) : 0;
     
     const newTimeout = baseRTT + variation + backoff;
     setAdaptiveTimeout(newTimeout);
@@ -225,65 +304,32 @@ const SelectiveRepeatARQ = () => {
     // Calculate adaptive timeout
     calculateAdaptiveTimeout();
     
-    // Get current ACK trigger mapping based on lostFrame
+    // Get current ACK trigger mapping based on lostFrames
     const ackTriggerMapping = getAckTriggerMapping();
-    
-    // Update window start position based on ACKs
-    if (currentStep > 4) {
-      const ackedFrames = Object.keys(ackTriggerMapping)
-        .filter(frame => {
-          const frameNum = parseInt(frame);
-          // Special handling for frame 0 when it's the lost frame
-          if (lostFrame === 0 && frameNum === 0) {
-            return ackTriggerMapping[frame] !== null && ackTriggerMapping[frame] * 2 - 1 <= currentStep;
-          } else {
-            return ackTriggerMapping[frame] !== null && ackTriggerMapping[frame] * 2 - 1 <= currentStep;
-          }
-        })
-        .map(frame => parseInt(frame));
-      
-      if (ackedFrames.length > 0) {
-        // Special handling for lost frame 0 case
-        if (lostFrame === 0) {
-          // Check if frame 0 has been ACKed after retransmission
-          const isFrame0Acked = ackedFrames.includes(0) && currentStep >= 16; // Frame 0 ack comes much later
-          
-          // Find the largest consecutively ACKed frame
-          const consecutiveAcks = [...ackedFrames].sort((a, b) => a - b);
-          let lastConsecutive = isFrame0Acked ? 0 : -1; // Start with -1 if frame 0 not ACKed yet
-          
-          for (let i = 0; i < consecutiveAcks.length; i++) {
-            if (consecutiveAcks[i] === lastConsecutive + 1) {
-              lastConsecutive = consecutiveAcks[i];
-            } else if (consecutiveAcks[i] > lastConsecutive + 1) {
-              break;
-            }
-          }
-          
-          // Update window start (add 1 because window starts after the last ACKed frame)
-          setWindowStart(Math.max(windowStart, lastConsecutive + 1));
-          setReceiverWindowStart(Math.max(receiverWindowStart, lastConsecutive + 1));
-        } else {
-          // Standard logic for other lost frames
-          // Find the largest consecutively ACKed frame
-          const consecutiveAcks = [...ackedFrames].sort((a, b) => a - b);
-          let lastConsecutive = consecutiveAcks[0];
-          
-          for (let i = 1; i < consecutiveAcks.length; i++) {
-            if (consecutiveAcks[i] === lastConsecutive + 1) {
-              lastConsecutive = consecutiveAcks[i];
-            } else {
-              break;
-            }
-          }
-          
-          // Update window start (add 1 because window starts after the last ACKed frame)
-          setWindowStart(Math.max(windowStart, lastConsecutive + 1));
-          setReceiverWindowStart(Math.max(receiverWindowStart, lastConsecutive + 1));
-        }
+
+    // Update window positions based on ACKs
+    const updateWindows = () => {
+      // Find the lowest unacknowledged frame in the current window
+      let lowestUnackedFrame = windowStart;
+      while (lowestUnackedFrame < windowStart + windowSize) {
+        const isAcked = Object.keys(ackTriggerMapping)
+          .filter(frame => parseInt(frame) === lowestUnackedFrame)
+          .some(frame => ackTriggerMapping[frame] * 2 - 1 <= currentStep);
+        
+        if (!isAcked) break;
+        lowestUnackedFrame++;
       }
-    }
-    
+      
+      // Calculate how many positions to slide
+      const slideAmount = lowestUnackedFrame - windowStart;
+      
+      if (slideAmount > 0) {
+        // Slide both windows by the same amount
+        setWindowStart(lowestUnackedFrame);
+        setReceiverWindowStart(receiverWindowStart + slideAmount);
+      }
+    };
+
     const calculateArrowPositions = () => {
       if (senderRefs.current.length && receiverRefs.current.length) {
         const dataArrows = senderRefs.current
@@ -298,11 +344,13 @@ const SelectiveRepeatARQ = () => {
               x2: receiverBox.left + receiverBox.width / 2,
               y2: receiverBox.top + receiverBox.height / 2,
               sender: index,
-              isError: index === lostFrame, 
+              isError: lostFrames.includes(index)
             };
           })
           .filter(Boolean);
 
+        setArrowPositions(dataArrows);
+        
         const ackArrows = receiverRefs.current
           .map((receiverEl, index) => {
             const ackSenderIndex = ackTriggerMapping[index];
@@ -318,17 +366,18 @@ const SelectiveRepeatARQ = () => {
               x2: senderBox.left + senderBox.width / 2,
               y2: senderBox.top + senderBox.height / 2,
               label: `Ack ${index}`,
-              ackStep: ackTriggerMapping[index] * 2 - 1, // Ensures ACK appears in previous step
-              isFromError: receiverPackets[index] === "E", // Check if this ACK is from an error frame
+              ackStep: ackTriggerMapping[index] * 2 - 1,
+              isFromError: receiverPackets[index] === "E",
             };
           })
           .filter(Boolean);
 
-        setArrowPositions(dataArrows);
         setAckPositions(ackArrows);
       }
     };
 
+    // Call updateWindows before calculating arrow positions
+    updateWindows();
     const timer = setTimeout(calculateArrowPositions, 100);
 
     // Manage frame visibility based on current step
@@ -370,10 +419,16 @@ const SelectiveRepeatARQ = () => {
     }
     setPacketTimers(newPacketTimers);
 
+    // Update refs for next comparison
+    prevStepRef.current = currentStep;
+    prevWindowStartRef.current = windowStart;
+    prevReceiverWindowStartRef.current = receiverWindowStart;
+    prevShownFramesRef.current = [...shownSenderFrames];
+
     if (isContinuous) {
       stepTimerRef.current = setInterval(() => {
         setCurrentStep(prevStep => prevStep + 1);
-      }, 2000);
+      }, 2000 / animationSpeed);
     }
 
     return () => {
@@ -382,23 +437,23 @@ const SelectiveRepeatARQ = () => {
         clearInterval(stepTimerRef.current);
       }
     };
-  }, [isContinuous, currentStep, adaptiveTimeout, windowStart, lostFrame]);
+  }, [isContinuous, currentStep, adaptiveTimeout, windowStart, lostFrames, lostAcks, animationSpeed]);
 
-  // Create packet sequences based on the lost frame
+  // Create packet sequences based on lost frames and lost ACKs
   const createSenderPackets = () => {
     let initial = 8;
-
-    let packets = [...Array(initial + lostFrame).keys()]; // Basic sequence 0-9
+    let packets = [...Array(initial).keys()]; // Basic sequence 0-7
     
-    // Add retransmitted frame and subsequent frames
-    if (lostFrame >= 0 && lostFrame <= 3) {
-      // Add retransmitted frame after the regular sequence
-      packets = [...packets, lostFrame];
-      
-      // Add additional frames after retransmission
-      for (let i = 8 + lostFrame; i < 14; i++) {
-        packets.push(i);
+    // Add retransmitted frames in order (including frames whose ACKs were lost)
+    [...new Set([...lostFrames, ...lostAcks])].forEach(frame => {
+      if (frame >= 0 && frame <= 3) {
+        packets.push(frame); // Add retransmitted frame
       }
+    });
+    
+    // Add additional frames after retransmissions
+    for (let i = 8; i < 14; i++) {
+      packets.push(i);
     }
     
     return packets;
@@ -407,21 +462,21 @@ const SelectiveRepeatARQ = () => {
   const createReceiverPackets = () => {
     let packets = [];
     
-    // Create the sequence with an error at the lost frame position
-    for (let i = 0; i < 8 + lostFrame; i++) {
-      if (i === lostFrame) {
-        packets.push("E"); // Error
-      } else {
-        packets.push(i);
-      }
+    // Create the sequence with errors at lost frame positions
+    for (let i = 0; i < 8; i++) {
+      packets.push(lostFrames.includes(i) ? "E" : i);
     }
     
-    // Add the retransmitted frame and subsequent frames
-    if (lostFrame >= 0 && lostFrame <= 3) {
-      packets.push(lostFrame);
-      for (let i = 8 + lostFrame; i < 13; i++) {
-        packets.push(i);
+    // Add the retransmitted frames in order (including frames whose ACKs were lost)
+    [...new Set([...lostFrames, ...lostAcks])].forEach(frame => {
+      if (frame >= 0 && frame <= 3) {
+        packets.push(frame);
       }
+    });
+    
+    // Add remaining frames
+    for (let i = 8; i < 13; i++) {
+      packets.push(i);
     }
     
     return packets;
@@ -433,7 +488,7 @@ const SelectiveRepeatARQ = () => {
   // Calculate arrow positioning based on lost frame
   const getArrowPosition = (frameType) => {
     const baseOffset = 300;
-    const lostFrameOffset = lostFrame * 90;
+    const lostFrameOffset = lostFrames[0] * 90;
     
     if (frameType === 'timeout') {
       return {
@@ -481,30 +536,67 @@ const SelectiveRepeatARQ = () => {
             className="toggle"
           />
         </div>
-        
-        {/* Lost Frame Selection Dropdown */}
+
+        {/* Animation Speed Control */}
         <div className="flex items-center space-x-2">
-          <label htmlFor="lost-frame-select">Lost Frame:</label>
-          <select 
-            id="lost-frame-select" 
-            value={lostFrame} 
-            onChange={handleLostFrameChange}
-            className="px-3 py-2 border rounded"
-          >
-            <option value="0">Frame 0</option>
-            <option value="1">Frame 1</option>
-            <option value="2">Frame 2</option>
-            <option value="3">Frame 3</option>
-          </select>
+          <label htmlFor="speed-control">Speed:</label>
+          <input
+            type="range"
+            id="speed-control"
+            min="0.5"
+            max="3"
+            step="0.5"
+            value={animationSpeed}
+            onChange={handleSpeedChange}
+            className="w-32"
+          />
+          <span className="text-sm">{animationSpeed}x</span>
+        </div>
+        
+        {/* Lost Frames Input */}
+        <div className="flex items-center space-x-2">
+          <label htmlFor="lost-frames-input">Lost Frames (0-3):</label>
+          <input 
+            type="text" 
+            id="lost-frames-input" 
+            defaultValue={lostFrames.join(',')} 
+            onChange={handleLostFramesChange}
+            placeholder="e.g. 0,1,2"
+            className={`px-3 py-2 border rounded w-32 ${simulationStarted ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+            disabled={simulationStarted}
+          />
+        </div>
+
+        {/* Lost ACKs Input */}
+        <div className="flex items-center space-x-2">
+          <label htmlFor="lost-acks-input">Lost ACKs (0-3):</label>
+          <input 
+            type="text" 
+            id="lost-acks-input" 
+            defaultValue={lostAcks.join(',')} 
+            onChange={handleLostAcksChange}
+            placeholder="e.g. 0,1,2"
+            className={`px-3 py-2 border rounded w-32 ${simulationStarted ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+            disabled={simulationStarted}
+          />
         </div>
         
         {!isContinuous && (
-          <button 
-            onClick={handleNextStep} 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Next Step
-          </button>
+          <>
+            <button 
+              onClick={handlePrevStep}
+              disabled={currentStep === 0}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous Step
+            </button>
+            <button 
+              onClick={handleNextStep} 
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Next Step
+            </button>
+          </>
         )}
         <button 
           onClick={resetSimulation} 
@@ -514,41 +606,11 @@ const SelectiveRepeatARQ = () => {
         </button>
       </div>
 
-      {/* Timeout Interval Arrow */}
-      <div className={`absolute top-36 left-0 right-0 ${shownSenderFrames.includes(lostFrame + 8) ? 'frame-fade-in' : 'opacity-0'}`}>
-        <TwoHeadedArrow 
-          label={`Timeout interval (Frame ${lostFrame})`} 
-          length={720}  
-          x={timeoutArrowPos.x - 70}        
-          y={timeoutArrowPos.y}
-          color="orange"
-        />
-      </div>
-
-      <div className={`absolute top-36 left-0 right-0 ${shownSenderFrames.includes(lostFrame + 7) ? 'frame-fade-in' : 'opacity-0'}`}>
-        <TwoHeadedArrow 
-          label="Buffered by data link layer" 
-          length={560}  
-          x={bufferArrowPos.x - 210}        
-          y={bufferArrowPos.y}        
-        />
-      </div>
-
-      <div className={`absolute top-36 left-0 right-0 ${shownReceiverFrames.includes(lostFrame) ? 'frame-fade-in' : 'opacity-0'}`}>
-      <Arrow label = {`Error (Frame ${lostFrame})`}
-      x={errorArrowPos.x - 210} 
-      y={errorArrowPos.y}
-      pointerY = {-20}
-      textWidth = {20} />
-      </div>
-
-      <div className={`absolute top-36 left-0 right-0 ${shownReceiverFrames.includes(lostFrame + 9) ? 'frame-fade-in' : 'opacity-0'}`}>
-      <Arrow label = {`Packets ${lostFrame + 1}-${lostFrame + 7} passed to network layer`}
-      x={networkArrowPos.x} 
-      y={networkArrowPos.y}
-      pointerY = {-20}
-      textWidth = {20} />
-      </div>
+      {!simulationStarted && (
+        <div className="text-center mb-4 text-lg text-blue-600">
+          Please enter lost frames and lost ACKs before starting the simulation
+        </div>
+      )}
 
       <style>{`
         @keyframes drawArrow {
@@ -569,19 +631,20 @@ const SelectiveRepeatARQ = () => {
         .data-arrow, .ack-arrow {
           stroke-dasharray: 1000;
           stroke-dashoffset: 1000;
-          animation: drawArrow 1s linear forwards;
+          animation: drawArrow ${1/animationSpeed}s linear forwards;
         }
         
         .error-arrow {
-          animation: drawArrow 1s linear forwards, blinkError 1s infinite;
+          animation: drawArrow ${1/animationSpeed}s linear forwards, blinkError ${1/animationSpeed}s infinite;
         }
         
         .frame-fade-in {
-          animation: fadeIn 0.5s ease-out forwards;
+          animation: fadeIn ${0.5/animationSpeed}s ease-out forwards;
         }
         
         .window-slide {
-          transition: transform 0.5s ease-out;
+          transition: transform ${0.5/animationSpeed}s cubic-bezier(0.4, 0, 0.2, 1);
+          will-change: transform;
         }
       `}</style>
 
@@ -662,31 +725,39 @@ const SelectiveRepeatARQ = () => {
         {/* ACK Arrows - drawn before data arrows */}
         {ackPositions
           .filter(({ ackStep }) => ackStep <= currentStep)
-          .map(({ x1, y1, x2, y2, label, isFromError }, index) => (
-            <React.Fragment key={`ack-${index}`}>
-              <line 
-                x1={x1} y1={y1 - 30} 
-                x2={x2} y2={y2 + 30} 
-                stroke={isFromError ? "white" : "grey"} 
-                strokeWidth="2" 
-                opacity="0.8" 
-                className="ack-arrow" 
-              />
-              <text 
-                x={(x1 + x2) / 2} 
-                y={(y1 + y2) / 2 - 5} 
-                fontSize="15" 
-                fill={isFromError ? "white" : "red"} 
-                fontWeight="bold"
-                textAnchor="middle" 
-                dominantBaseline="middle"
-              >
-                {label}
-              </text>
-            </React.Fragment>
-          ))}
+          .map(({ x1, y1, x2, y2, label, isFromError }, index) => {
+            const ackNumber = parseInt(label.split(' ')[1]);
+            const isLostAck = lostAcks.includes(ackNumber);
+            
+            // Don't show lost ACKs at all
+            if (isLostAck) return null;
+            
+            return (
+              <React.Fragment key={`ack-${index}`}>
+                <line 
+                  x1={x1} y1={y1 - 30} 
+                  x2={x2} y2={y2 + 30} 
+                  stroke={isFromError ? "white" : "grey"} 
+                  strokeWidth="2" 
+                  opacity="0.8" 
+                  className="ack-arrow" 
+                />
+                <text 
+                  x={(x1 + x2) / 2} 
+                  y={(y1 + y2) / 2 - 5} 
+                  fontSize="15" 
+                  fill={isFromError ? "white" : "grey"} 
+                  fontWeight="bold"
+                  textAnchor="middle" 
+                  dominantBaseline="middle"
+                >
+                  {label}
+                </text>
+              </React.Fragment>
+            );
+          })}
 
-        {/* Data Arrows */}
+        {/* Data Arrows - Modified for lost frames */}
         {arrowPositions
           .filter((_, index) => visibleArrowIndexes.includes(index))
           .map(({ x1, y1, x2, y2, sender, isError }, index) => (
@@ -694,9 +765,9 @@ const SelectiveRepeatARQ = () => {
               key={`data-${sender}`} 
               x1={x1} y1={y1 + 30} 
               x2={x2} y2={y2 - 30} 
-              stroke={isError ? "red" : "black"} 
+              stroke={lostFrames.includes(sender) ? "red" : "black"} 
               strokeWidth="2" 
-              className={isError ? "error-arrow" : "data-arrow"}
+              className={lostFrames.includes(sender) ? "error-arrow" : "data-arrow"}
             />
           ))}
       </svg>
