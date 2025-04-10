@@ -366,28 +366,53 @@ const SelectiveRepeatARQ = () => {
               `Window slides to position ${windowStart}`,
               "window"
             );
+            return; // Exit early to prioritize window slide message
           }
 
-          // Check if an ACK is received at this step
+          // Check for lost ACKs at this step
+          for (const ackNum of lostAcks) {
+            const ackStep = ackNum * 2 + 1;
+            if (currentStep === ackStep) {
+              setTransmissionLog(`ACK ${ackNum} is lost`, "error");
+              return; // Exit early to prioritize lost ACK message
+            }
+          }
+
+          // Check if an ACK is received at this step - FIXED ACK IDENTIFICATION
           const ackForThisStep = Object.entries(ackTriggerMapping).find(
             ([frame, ackSenderIndex]) =>
               ackSenderIndex !== null && ackSenderIndex * 2 - 1 === currentStep
           );
 
           if (ackForThisStep) {
-            setTransmissionLog(
-              `Received ACK for frame ${ackForThisStep[0]}`,
-              "ack"
-            );
-          }
-
-          // Check for lost ACKs at this step
-          lostAcks.forEach((ackNum) => {
-            const ackStep = ackNum * 2 + 1;
-            if (currentStep === ackStep) {
-              setTransmissionLog(`ACK ${ackNum} is lost`, "error");
+            const framePosition = parseInt(ackForThisStep[0]);
+            const frameValue = senderPackets[framePosition];
+            
+            // Only show ACK logs for valid ACKs (not from error frames/white ACKs)
+            const isFromError = receiverPackets[framePosition] === "E";
+            
+            if (!isFromError) {
+              // MAJOR FIX: More accurate identification of retransmitted frames
+              // Only consider frames that are actually retransmissions of lost frames
+              const isRetransmittedFrame = 
+                // Check if this is actually a retransmission by verifying:
+                // 1. It's a frame number that was initially lost
+                // 2. AND it's at position 8+ (after the initial sequence)
+                lostFrames.includes(frameValue) && framePosition >= 8;
+              
+              if (isRetransmittedFrame) {
+                setTransmissionLog(
+                  `Received ACK for retransmitted frame ${frameValue}`,
+                  "ack"
+                );
+              } else {
+                setTransmissionLog(
+                  `Received ACK for frame ${frameValue}`,
+                  "ack"
+                );
+              }
             }
-          });
+          }
         }
       }
     };
