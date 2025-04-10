@@ -771,6 +771,79 @@ const SelectiveRepeatARQ = () => {
             />
           ))}
       </svg>
+
+      {/* Added Notes Section */}
+      <div className="mt-4 text-center text-lg">
+        <p className="font-bold">Framesize: 4</p>
+        <p className="text-gray-600">Leave the input boxes empty to simulate an errorfree execution</p>
+      </div>
+      
+      {/* Added Legend */}
+      <div className="mt-8 p-4 border rounded-lg bg-white shadow-md max-w-3xl">
+        <h2 className="text-2xl font-bold mb-4 text-center">Legend</h2>
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "black" }}></div>
+              <span>Data Frame</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "red" }}></div>
+              <span>Lost Data Frame</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "grey" }}></div>
+              <span>ACK</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "white", border: "1px solid grey" }}></div>
+              <span>Lost ACK (Not Shown)</span>
+            </div>
+          </div>
+          <div>
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "rgba(0, 128, 255, 0.2)", border: "2px solid rgba(0, 128, 255, 0.8)" }}></div>
+              <span>Sender Window</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "rgba(0, 192, 0, 0.2)", border: "2px solid rgba(0, 128, 255, 0.8)" }}></div>
+              <span>Receiver Window</span>
+            </div>
+            <div className="legend-item">
+              <div className="flex items-center">
+                <svg width="20" height="20" className="mr-2">
+                  <circle cx="10" cy="10" r="8" fill="white" stroke="orange" strokeWidth="2"/>
+                </svg>
+                <span>Packet Timer</span>
+              </div>
+            </div>
+            <div className="legend-item">
+              <div className="flex items-center">
+                <span className="px-2 py-1 border-2 border-blue-500 mr-2 text-xs">0</span>
+                <span>Frame in Window</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style>
+        {`
+          .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+          }
+          
+          .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border-radius: 3px;
+          }
+        `}
+      </style>
+
     </div>
   );
 };
