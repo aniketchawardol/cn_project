@@ -198,10 +198,11 @@ const SelectiveRepeatARQ = () => {
       9: 13,
     };
 
-    // Add retransmitted frames' ACKs (including frames whose ACKs were lost)
+    // Instead of overwriting, add a new property for retransmission:
     [...lostFrames, ...lostAcks].forEach((frame) => {
       if (frame >= 0 && frame <= 3) {
-        mapping[frame] = frame + 8; // Retransmitted frame's ACK comes later
+        // For instance, create a property like r2 for retransmitted frame 2.
+        mapping[`r${frame}`] = frame + 8;
       }
     });
 
@@ -387,19 +388,19 @@ const SelectiveRepeatARQ = () => {
           if (ackForThisStep) {
             const framePosition = parseInt(ackForThisStep[0]);
             const frameValue = senderPackets[framePosition];
-            
+
             // Only show ACK logs for valid ACKs (not from error frames/white ACKs)
             const isFromError = receiverPackets[framePosition] === "E";
-            
+
             if (!isFromError) {
               // MAJOR FIX: More accurate identification of retransmitted frames
               // Only consider frames that are actually retransmissions of lost frames
-              const isRetransmittedFrame = 
+              const isRetransmittedFrame =
                 // Check if this is actually a retransmission by verifying:
                 // 1. It's a frame number that was initially lost
                 // 2. AND it's at position 8+ (after the initial sequence)
                 lostFrames.includes(frameValue) && framePosition >= 8;
-              
+
               if (isRetransmittedFrame) {
                 setTransmissionLog(
                   `Received ACK for retransmitted frame ${frameValue}`,
