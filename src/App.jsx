@@ -955,7 +955,7 @@ const SelectiveRepeatARQ = () => {
 
       {/* Added Notes Section */}
       <div className="mt-4 text-center text-lg">
-        <p className="font-bold">Framesize: 4</p>
+        <p className="font-bold">Windowsize: 4</p>
         <p className="text-gray-600">
           Leave the input boxes empty to simulate an errorfree execution
         </p>
