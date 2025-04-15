@@ -1,57 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 
-const TwoHeadedArrow = ({
-  label = "Timeout interval",
-  length = 800,
-  x = 50,
-  y = 50,
-  color = "black",
-}) => {
-  return (
-    <svg width={length + 20} height={100} className="overflow-visible">
-      {/* Vertical start line */}
-      <line
-        x1={x + 10}
-        y1={y - 20}
-        x2={x + 10}
-        y2={y + 20}
-        stroke={color}
-        strokeWidth="1"
-      />
-
-      {/* Main horizontal arrow */}
-      <line
-        x1={x + 10}
-        y1={y}
-        x2={x + length + 10}
-        y2={y}
-        stroke={color}
-        strokeWidth="1"
-      />
-
-      {/* Vertical end line */}
-      <line
-        x1={x + length + 10}
-        y1={y - 20}
-        x2={x + length + 10}
-        y2={y + 20}
-        stroke={color}
-        strokeWidth="1"
-      />
-
-      {/* Label */}
-      <text
-        x={x + length / 2 + 10}
-        y={y - 10}
-        textAnchor="middle"
-        fontSize="15"
-        fill={color}
-      >
-        {label}
-      </text>
-    </svg>
-  );
-};
 
 // Window Component to visualize sliding window
 const SlidingWindow = ({
@@ -343,7 +291,7 @@ const SelectiveRepeatARQ = () => {
             // Check if this is a retransmission (frame value less than 4 but position 8 or greater)
             if (frameNumber >= 8 && frameValue < 4) {
               setTransmissionLog(
-                `Retransmitting frame ${frameValue}`,
+                `Successfully retransmitted frame ${frameValue}`,
                 "retransmit"
               );
             }
@@ -403,7 +351,7 @@ const SelectiveRepeatARQ = () => {
 
               if (isRetransmittedFrame) {
                 setTransmissionLog(
-                  `Received ACK for retransmitted frame ${frameValue}`,
+                  `Received ACK for successfully retransmitted frame ${frameValue}`,
                   "ack"
                 );
               } else {
